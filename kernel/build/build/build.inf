@@ -1,0 +1,62 @@
+;
+; build.inf
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System ; TODO: specify appropriate Class
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318} ; TODO: specify appropriate ClassGuid
+Provider    = %ManufacturerName%
+CatalogFile = build.cat
+DriverVer   = ; TODO: set DriverVer in stampinf property pages
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+build.sys = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NT$ARCH$.10.0...16299 ; %13% support introduced in build 16299
+
+[Standard.NT$ARCH$.10.0...16299]
+%build.DeviceDesc% = build_Device, Root\build ; TODO: edit hw-id
+
+[build_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+build.sys
+
+;-------------- Service installation
+[build_Device.NT.Services]
+AddService = build,%SPSVCINST_ASSOCSERVICE%, build_Service_Inst
+
+; -------------- build driver install sections
+[build_Service_Inst]
+DisplayName    = %build.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\build.sys
+
+[build_Device.NT.Wdf]
+KmdfService = build, build_wdfsect
+
+[build_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName = "<Your manufacturer name>" ;TODO: Replace with your manufacturer name
+DiskName = "build Installation Disk"
+build.DeviceDesc = "build Device"
+build.SVCDESC = "build Service"
