@@ -17,6 +17,9 @@
 #define IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR 14
 #define IMAGE_NUMBEROF_DIRECTORY_ENTRIES 15
 
+#define DWORD ULONG
+#define WORD  USHORT
+
 typedef struct _IMAGE_DOS_HEADER
 {
 	unsigned short e_magic;
@@ -93,3 +96,17 @@ typedef struct _IMAGE_NT_HEADERS_64 {
 	IMAGE_FILE_HEADER       FileHeader;
 	IMAGE_OPTIONAL_HEADER64 OptionalHeader;
 } IMAGE_NT_HEADERS_64, * PIMAGE_NT_HEADERS_64;
+
+typedef struct _IMAGE_EXPORT_DIRECTORY {
+	DWORD   Characteristics;          // 1) 保留，恒为0x00000000
+	DWORD   TimeDateStamp;            // 2) 时间戳
+	WORD    MajorVersion;             // 3) 主版本号，一般不赋值
+	WORD    MinorVersion;             // 4) 子版本号，一般不赋值
+	DWORD   Name;                     // 5) 模块名称
+	DWORD   Base;                     // 6) 索引基数
+	DWORD   NumberOfFunctions;        // 7) 导出地址表中的成员个数
+	DWORD   NumberOfNames;            // 8) 导出名称表中的成员个数
+	DWORD   AddressOfFunctions;       // 9) 导出地址表（EAT）
+	DWORD   AddressOfNames;           // 10) 导出名称表（ENT）
+	DWORD   AddressOfNameOrdinals;    // 11) 指向导出序列号数组
+} IMAGE_EXPORT_DIRECTORY, * PIMAGE_EXPORT_DIRECTORY;
