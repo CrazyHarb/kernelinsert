@@ -118,8 +118,12 @@
     <ClCompile Include="..\..\src\Source.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\src\AsmFunc.h" />
     <ClInclude Include="..\..\src\PEHeader.h" />
     <ClInclude Include="..\..\src\preHeader.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="..\..\src\internalFunc.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

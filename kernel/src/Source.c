@@ -1,6 +1,7 @@
 #include "preHeader.h"
 #include "PEHeader.h"
 #include "ntddk.h"
+#include "AsmFunc.h"
 
 #define DebugPrint(...) \
     DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, __VA_ARGS__)
@@ -45,9 +46,11 @@ void* ScanExportFunction(char* a_charptr_peBase, const char *a_constchar_funcNam
 					ULONG* l_ulongptr_funcAddressOffset = (ULONG*)(a_charptr_peBase + l_export_dirctory->AddressOfFunctions);
 					DebugPrint("[KernelInsert]ScanExportFunction l_export_dirctory->AddressOfFunctions:0x%x l_ulongptr_funcAddressOffset -->: 0x%p\n", l_export_dirctory->AddressOfFunctions, l_ulongptr_funcAddressOffset);
 					
-					DebugPrint("[KernelInsert]ScanExportFunction Address offset --> 0x%x  Address -->: 0x%p\n", l_ulongptr_funcAddressOffset[l_ushort_funcIndex], a_charptr_peBase + l_ulongptr_funcAddressOffset[l_ushort_funcIndex]);
-					return (a_charptr_peBase + l_ulongptr_funcAddressOffset[l_ushort_funcIndex]);
+					void* l_voidptr_result = a_charptr_peBase + l_ulongptr_funcAddressOffset[l_ushort_funcIndex];
+					DebugPrint("[KernelInsert]ScanExportFunction Address offset --> 0x%x  Address -->: 0x%p\n", l_ulongptr_funcAddressOffset[l_ushort_funcIndex], l_voidptr_result);
+					return l_voidptr_result;
 				}
+				
 				l_charptr_funcNames += l_ansi_funcName.Length + 1;
 				l_ulongptr_funcNamesOffset++;
 			}
@@ -123,7 +126,6 @@ HANDLE HandleGetModuleBase(PEPROCESS Process, LPCWSTR moduleName) {
 			break;
 		}
 		else {
-			
 			if (!RtlCompareUnicodeString(&(ldrEntry->BaseDllName), &l_unicodestring_moduleName, FALSE)) {
 				l_handle_result = (HANDLE)ldrEntry->DllBase;
 				DebugPrint("[KernelInsert]Find Module: %wZ --> 0x%p  FullName: %wZ\n",&l_unicodestring_moduleName, l_handle_result, &(ldrEntry->FullDllName));
@@ -153,13 +155,76 @@ void PloadImageNotifyRoutine(
 		{
 			if (!g_handle_ntdllBase)
 			{
-				g_handle_ntdllBase = HandleGetModuleBase(l_peprocess_instance, L"ntdll.dll");
-				DebugPrint("[KernelInsert]Get Ntdll base: 0x%p\n", g_handle_ntdllBase);
+				g_handle_ntdllBase = HandleGetModuleBase(l_peprocess_instance, L"KERNELBASE.dll");
+				DebugPrint("[KernelInsert]Get kernelbase base: 0x%p\n", g_handle_ntdllBase);
 				if (g_handle_ntdllBase != 0)
 				{
+					// ban SectionSignatureLevel
+					*((unsigned char*)l_peprocess_instance + 0x6f9) = 0;
 					KAPC_STATE state;
 					KeStackAttachProcess(l_peprocess_instance, &state);
-					ScanExportFunction(g_handle_ntdllBase, "LdrLoadDll");
+					void *funcAddress = ScanExportFunction(g_handle_ntdllBase, "LoadLibraryW");
+					if (funcAddress != 0)
+					{
+						HANDLE l_handle_process = 0;
+
+						OBJECT_ATTRIBUTES l_objattr_temp;
+						CLIENT_ID l_clientid_cid;
+
+						l_clientid_cid.UniqueProcess = (HANDLE)ProcessId;
+						l_clientid_cid.UniqueThread = (HANDLE)0;
+						InitializeObjectAttributes(&l_objattr_temp, NULL, 0, NULL, NULL);
+
+						if (NT_SUCCESS(ZwOpenProcess(&l_handle_process, PROCESS_ALL_ACCESS, &l_objattr_temp, &l_clientid_cid))) {
+							void* l_voidptr_baseAddress = 0;
+							ULONG_PTR l_ULONGPTR_zeroBits = 0;
+							ULONG_PTR l_ULONGPTR_reginSize = 0x1000;
+							NTSTATUS l_ntstatus_ret = ZwAllocateVirtualMemory(l_handle_process, &l_voidptr_baseAddress, l_ULONGPTR_zeroBits, &l_ULONGPTR_reginSize, MEM_COMMIT, PAGE_READWRITE);
+							if (NT_SUCCESS(l_ntstatus_ret)) {
+								UNICODE_STRING l_unicodestr_mem;
+								DebugPrint("[KernelInsert]Allocate process memory success --> 0x%p size:0x%I64x!\n", l_voidptr_baseAddress, l_ULONGPTR_reginSize);
+								RtlInitUnicodeString(&l_unicodestr_mem, L"C:\\p_minimal.dll");
+								RtlZeroBytes(l_voidptr_baseAddress, l_unicodestr_mem.Length + 4);
+								RtlCopyMemory(l_voidptr_baseAddress, l_unicodestr_mem.Buffer, l_unicodestr_mem.Length);
+								ULONG stackReserved = 0x1000, stackCommit = 0x1000;
+								HANDLE l_handle_thread = 0;
+								CLIENT_ID l_clientid_instance;
+								l_ntstatus_ret = RtlCreateUserThread(l_handle_process, 0, FALSE, 0, 0,0, funcAddress, l_voidptr_baseAddress, &l_handle_thread, 0);
+								DebugPrint("[KernelInsert]RtlCreateUserThread --> 0x%x!\n", l_ntstatus_ret);
+								//STATUS_SUCCESS
+								//
+								//// copy Shellcode
+								//RtlCopyMemory(l_voidptr_baseAddress, funcAddress, GetHookFunAsmSize());
+								////RtlCopyMemory(l_voidptr_baseAddress, GetHookFunctionAddress(), GetHookFunAsmSize());
+								//RtlCopyMemory(((char *)l_voidptr_baseAddress + GetHookFunAsmSize()), GetHookFunctionAddress(), GetHookFunAsmSize());
+								//void* l_voidptr_realFunctionAddr = (char*)funcAddress + GetHookFunAsmSize();
+								//RtlCopyMemory(((char*)l_voidptr_baseAddress + GetHookFunAsmSize() + GetHookFunctionJmpDataOffset()), &l_voidptr_realFunctionAddr, sizeof(l_voidptr_realFunctionAddr));
+
+								//SIZE_T funcSize = GetHookFunAsmSize();
+								//ULONG_PTR l_ulong_oldVal = 0;
+								//
+								//void* funcProtectTempAddress = funcAddress;
+								//l_ntstatus_ret =  ZwProtectVirtualMemory(l_handle_process, &funcProtectTempAddress, &funcSize, PAGE_EXECUTE_READWRITE, &l_ulong_oldVal);
+								//DebugPrint("[KernelInsert]ZwProtectVirtualMemory status : 0x%x\n", l_ntstatus_ret);
+								//if (NT_SUCCESS(l_ntstatus_ret))
+								//{
+								//	RtlCopyMemory(funcAddress, GetHookFunctionAddress(), GetHookFunAsmSize());
+								//	RtlCopyMemory((char*)funcAddress + GetHookFunctionJmpDataOffset(), &l_voidptr_baseAddress, sizeof(l_voidptr_baseAddress));
+
+								//	ZwProtectVirtualMemory(l_handle_process, &funcProtectTempAddress, &funcSize, l_ulong_oldVal, &l_ulong_oldVal);
+								//}
+								//DbgBreakPoint();
+							}
+							else {
+								DebugPrint("[KernelInsert]Allocate process memory failed: 0x%x\n", l_ntstatus_ret);
+							}
+
+							ZwClose(l_handle_process);
+						}
+						else {
+							DebugPrint("[KernelInsert]Open process failed\n");
+						}
+					}
 					KeUnstackDetachProcess(&state);
 				}
 			}

@@ -122,3 +122,15 @@ typedef struct _PEB
 
 NTKERNELAPI PPEBContent NTAPI PsGetProcessPeb(IN PEPROCESS Process);
 NTKERNELAPI PCHAR NTAPI PsGetProcessImageFileName(IN PEPROCESS Process);
+NTKERNELAPI NTSTATUS NTAPI ZwProtectVirtualMemory(IN HANDLE ProcessHandle, PVOID* BaseAddress, SIZE_T* ProtectSize, ULONG_PTR NewProtect, ULONG_PTR* OldProtect);
+NTKERNELAPI NTSTATUS NTAPI RtlCreateUserThread(
+	IN HANDLE               ProcessHandle,
+	IN PSECURITY_DESCRIPTOR SecurityDescriptor OPTIONAL,
+	IN BOOLEAN              CreateSuspended,
+	IN ULONG                StackZeroBits,
+	IN OUT PULONG           StackReserved,
+	IN OUT PULONG           StackCommit,
+	IN PVOID                StartAddress,
+	IN PVOID                StartParameter OPTIONAL,
+	OUT PHANDLE             ThreadHandle,
+	OUT PCLIENT_ID          ClientID);
