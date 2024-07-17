@@ -1,5 +1,8 @@
 #include "stdio.h"
 #include "windows.h"
+#include "rpc.h"
+
+ULONG_PTR(CALLBACK* OpenServerFunc)(void* param1, unsigned __int16* param2, unsigned int param3, void** param4);
 
 void __stdcall Run(void* a_voidptr_guid) {
     WCHAR l_wchar_buffer[1024];
@@ -54,6 +57,28 @@ void* ScanRpcCode() {
     return 0;
 }
 
+void* ReplaceRpcFuncTable(char* a_voidptr_rpcScanAddress, void* a_voidptr_function, ULONG a_ulong_functionIndex) {
+    static const int a = offsetof(RPC_SERVER_INTERFACE, InterfaceId);
+    RPC_SERVER_INTERFACE* l_rpcserver_interface = (RPC_SERVER_INTERFACE*)(a_voidptr_rpcScanAddress - offsetof(RPC_SERVER_INTERFACE, InterfaceId));
+    MIDL_SERVER_INFO* l_midlserver_info = (MIDL_SERVER_INFO*)l_rpcserver_interface->InterpreterInfo;
+    if (l_midlserver_info != 0)
+    {
+        DWORD l_dword_old = 0;
+        VirtualProtect((LPVOID) & (l_midlserver_info->DispatchTable[a_ulong_functionIndex]), sizeof(void*), PAGE_READWRITE, &l_dword_old);
+        void* l_voidptr_sourceAddress = l_midlserver_info->DispatchTable[a_ulong_functionIndex];
+        ((SERVER_ROUTINE*)(l_midlserver_info->DispatchTable))[a_ulong_functionIndex] = (const SERVER_ROUTINE)a_voidptr_function;
+        VirtualProtect((LPVOID) & (l_midlserver_info->DispatchTable[a_ulong_functionIndex]), sizeof(void*), l_dword_old, &l_dword_old);
+        return l_voidptr_sourceAddress;
+    }
+
+    return 0;
+}
+
+ULONG_PTR _stdcall ROpenServiceW(void* param1, unsigned __int16* param2, unsigned int param3, void** param4) {
+    OutputDebugString(L"[Injectdll]some one try to operate services\n");
+    return OpenServerFunc(param1, param2, param3, param4);
+}
+
 BOOL WINAPI DllMain(
     HINSTANCE hinstDLL,  // handle to DLL module
     DWORD fdwReason,     // reason for calling function
@@ -65,7 +90,14 @@ BOOL WINAPI DllMain(
     case DLL_PROCESS_ATTACH:
         // Initialize once for each new process.
         // Return FALSE to fail DLL load.
-        CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)Run, ScanRpcCode(), NULL, NULL);
+    {
+        char* l_voidptr_start = (char*)ScanRpcCode();
+        if (l_voidptr_start != 0)
+        {
+            OpenServerFunc = (ULONG_PTR(CALLBACK*)(void*, unsigned __int16*, unsigned int, void**))ReplaceRpcFuncTable(l_voidptr_start, (void*)ROpenServiceW, 0x10);
+        }
+        CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)Run, l_voidptr_start, NULL, NULL);
+    }
         break;
 
     case DLL_THREAD_ATTACH:
