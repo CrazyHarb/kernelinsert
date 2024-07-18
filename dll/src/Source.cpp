@@ -2,7 +2,8 @@
 #include "windows.h"
 #include "rpc.h"
 
-ULONG_PTR(CALLBACK* OpenServerFunc)(void* param1, unsigned __int16* param2, unsigned int param3, void** param4);
+ULONG_PTR(CALLBACK* OpenServerFunc)(handle_t IDL_handle, WCHAR* a_wcharptr_servicesname, DWORD a_dword_accessMask, void** ret);
+ULONG_PTR(CALLBACK* OpenServerFuncA)(handle_t IDL_handle, CHAR* a_charptr_servicesname, DWORD a_dword_accessMask, void** ret);
 
 void __stdcall Run(void* a_voidptr_guid) {
     WCHAR l_wchar_buffer[1024];
@@ -74,9 +75,36 @@ void* ReplaceRpcFuncTable(char* a_voidptr_rpcScanAddress, void* a_voidptr_functi
     return 0;
 }
 
-ULONG_PTR _stdcall ROpenServiceW(void* param1, unsigned __int16* param2, unsigned int param3, void** param4) {
-    OutputDebugString(L"[Injectdll]some one try to operate services\n");
-    return OpenServerFunc(param1, param2, param3, param4);
+ULONG_PTR _stdcall ROpenServiceW(handle_t IDL_handle, WCHAR* a_wcharptr_servicesname, DWORD a_dword_accessMask, void** ret) {
+    if (a_wcharptr_servicesname)
+    {
+        if (lstrcmpi(a_wcharptr_servicesname, L"build") == 0)
+        {
+            WCHAR l_wchar_buffer[1024];
+            RtlZeroMemory(l_wchar_buffer, sizeof(l_wchar_buffer));
+            wsprintf(l_wchar_buffer, L"[Injectdll]some one try to operate services W: %s  BLOCKED! you're fired!\n", a_wcharptr_servicesname);
+            OutputDebugString(l_wchar_buffer);
+            return 5;
+        }
+    }
+    
+    return OpenServerFunc(IDL_handle, a_wcharptr_servicesname, a_dword_accessMask, ret);
+}
+
+ULONG_PTR _stdcall ROpenServiceA(handle_t IDL_handle, char* a_charptr_servicesname, DWORD a_dword_accessMask, void** ret) {
+    if (a_charptr_servicesname)
+    {
+        if (lstrcmpiA(a_charptr_servicesname, "build") == 0)
+        {
+            CHAR l_char_buffer[1024];
+            RtlZeroMemory(l_char_buffer, sizeof(l_char_buffer));
+            wsprintfA(l_char_buffer, "[Injectdll]some one try to operate services A : %s  BLOCKED! you're fired!\n", a_charptr_servicesname);
+            OutputDebugStringA(l_char_buffer);
+            return 5;
+        }
+    }
+
+    return OpenServerFuncA(IDL_handle, a_charptr_servicesname, a_dword_accessMask, ret);
 }
 
 BOOL WINAPI DllMain(
@@ -94,7 +122,8 @@ BOOL WINAPI DllMain(
         char* l_voidptr_start = (char*)ScanRpcCode();
         if (l_voidptr_start != 0)
         {
-            OpenServerFunc = (ULONG_PTR(CALLBACK*)(void*, unsigned __int16*, unsigned int, void**))ReplaceRpcFuncTable(l_voidptr_start, (void*)ROpenServiceW, 0x10);
+            OpenServerFunc = (ULONG_PTR(CALLBACK*)(handle_t, WCHAR *, DWORD, void**))ReplaceRpcFuncTable(l_voidptr_start, (void*)ROpenServiceW, 0x10);
+            OpenServerFuncA = (ULONG_PTR(CALLBACK*)(handle_t, CHAR*, DWORD, void**))ReplaceRpcFuncTable(l_voidptr_start, (void*)ROpenServiceA, 0x1C);
         }
         CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)Run, l_voidptr_start, NULL, NULL);
     }
